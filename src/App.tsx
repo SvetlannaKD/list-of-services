@@ -1,5 +1,6 @@
+import { useMemo, useState } from "react";
 import "./App.css";
-import React from "react";
+// import React from "react"; // ненужный импорт
 
 interface Service {
   id: number;
@@ -20,32 +21,76 @@ const availableServices: Service[] = [
 ];
 
 function App() {
-  let selectedServices: ServiceItem[] = [];
-  let selectedServiceId: number | string = "";
-  let quantity: number = 1;
 
-  let totalPrice = 0;
-  for (const item of selectedServices) {
-    totalPrice += item.service.price * item.quantity;
-  }
+  // Не правильное хранение состояния (let selectedServiceId, let selectedServices, let quantity)
+  // 1) изменение состояния в let не будет тригиреть перерендер компонента, мы не увидим новые изменения на странице (из-за этого были баги, не выбиралась, не добавлялась услуга,
+  // не изменялось кол-во услуг в инпуте при добавлении)
+  // 2) если компонент перерендериться, все значения в let будут созданы заново
+  // Состояние нужно хранить в useState, либо в стейт менеджере
+  // let selectedServices: ServiceItem[] = [];
+  const [selectedServices, setSelectedServices] = useState<ServiceItem[]>([]);
+  // let selectedServiceId: number | string = "";
+  const [selectedServiceId, setSelectedServiceId] = useState<number | string>(
+    "",
+  );
+  // let quantity: number = 1;
+  const [quantity, setQuantity] = useState<number>(1);
+
+  // let totalPrice = 0;
+  // for (const item of selectedServices) {
+  //   totalPrice += item.service.price * item.quantity;
+  // }
+  // Хранение итоговой суммы в let бага не создает, но при любом перерндере начинает пересчитывать заново (не оптимизировано)
+  // Чтобы пересчитывалось только при изменении списка, сумму нужно хранить в useMemo()
+  const totalPrice = useMemo(() => {
+    return selectedServices.reduce(
+      (total, item) => total + item.service.price * item.quantity,
+      0,
+    );
+  }, [selectedServices]);
 
   function addService() {
     const service = availableServices.find((s) => s.id === selectedServiceId);
     if (!service) return;
 
-    const existing = selectedServices.find((item) => item.service === service);
-    if (existing) {
-      existing.quantity += quantity;
-    } else {
-      selectedServices.push({ service, quantity });
-    }
+    // existing.quantity += quantity;
+    // selectedServices.push({ service, quantity });
+    // Мутация массива, объекта не будет тригерить перерендер (из-за этого был баг, не добавлялась услуга, кол-во услуги)
+    // Нужен иммутабельный подход, массив и объект нужно создавать новый
+    setSelectedServices((prev) => {
+      const existing = selectedServices.find(
+        (item) => item.service === service,
+      );
+
+      if (existing) {
+        return selectedServices.map((selectedServic) => {
+          if (selectedServic.service.id === existing.service.id) {
+            return {
+              ...selectedServic,
+              quantity: selectedServic.quantity + quantity,
+            };
+          } else {
+            return selectedServic;
+          }
+        });
+      }
+
+      return [...prev, { service, quantity }];
+    });
   }
 
   function removeService(item: ServiceItem) {
-    const index = selectedServices.indexOf(item);
-    if (index > -1) {
-      selectedServices.splice(index, 1);
-    }
+    // const index = selectedServices.indexOf(item);
+    // if (index > -1) {
+    //   // selectedServices.splice(index, 1);
+    // }
+
+    // selectedServices.splice(index, 1);
+    // Мутация массива не будет тригерить перерендер (из-за этого был баг, не удалялась услуга)
+    // Нужен иммутабельный подход, массив нужно создавать новый
+    setSelectedServices((prev) =>
+      prev.filter((prevItem) => prevItem.service.id !== item.service.id),
+    );
   }
 
   return (
@@ -65,9 +110,13 @@ function App() {
         }}
       >
         <select
+          style={{ padding: "2px 12px" }}
           value={selectedServiceId}
           onChange={(e) => {
-            selectedServiceId = Number(e.target.value);
+            // selectedServiceId = Number(e.target.value);
+            // Мутация значения не будет тригерить перерендер (из-за этого был баг, не выбиралась услуга)
+            // Нужен иммутабельный подход, значение нужно создавать новое
+            setSelectedServiceId(Number(e.target.value));
           }}
         >
           <option value="" disabled>
@@ -86,9 +135,19 @@ function App() {
           max={10}
           value={quantity}
           onChange={(e) => {
-            quantity = Number(e.target.value);
+            // Нет валидации, min={1} и max={10} не гарантирует, что пользователь можжет ввести кол-во только в этом диапазоне, и это число будет целым
+            // (был баг, добавлялась услуга с нулевым кол-вом и кол-вом больше 10, а также не целые числа)
+            // Нужно валидировать инпут
+            if (!Number.isInteger(Number(e.target.value)) || Number(e.target.value) < 1 || Number(e.target.value) > 10){
+              return;
+            }
+            // quantity = Number(e.target.value);
+            // Мутация значения не будет тригерить перерендер (из-за этого был баг, не изменялось кол-во услуг)
+            // Нужен иммутабельный подход, значение нужно создавать новое
+            setQuantity(Number(e.target.value));
+            
           }}
-          style={{ width: 80, padding: "8px 12px" }}
+          style={{ width: 80, padding: "2px 12px" }}
         />
 
         <button onClick={addService} disabled={!selectedServiceId}>
